@@ -1,32 +1,15 @@
 const St = imports.gi.St;
 const Main = imports.ui.main;
-// const Tweener = imports.ui.tweener;
 const Gio = imports.gi.Gio;
 const Mainloop = imports.mainloop;
-// const GLib = imports.gi.GLib;
 
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
-const Convenience = Me.imports.convenience;
+const refreshTime = 1.0;
 
-const PREFS_SCHEMA = 'org.gnome.shell.extensions.simplenetspeed';
-const refreshTime = 3.0;
-
-let settings;
 let button, timeout;
-// let icon, iconDark;
-let ioSpeed;
-let ioSpeedW;
-let lbl;
-let lastCount = 0, lastSpeed = 0, lastCountUp = 0;
-let mode; // 0: kbps 1: K/s 2: U:kbps D:kbps 3: U:K/s D:K/s 4: Total KB
+let label;
+let lastCount = 0, lastCountUp = 0;
 
 function init() {
-
-    settings = Convenience.getSettings(PREFS_SCHEMA);
-
-    mode = settings.get_int('mode'); // default mode using bit (bps, kbps)
-
     button = new St.Bin({
         style_class: 'panel-button',
         reactive: true,
@@ -36,51 +19,12 @@ function init() {
         track_hover: true
     });
 
-    /*
-    icon = new St.Icon({
-        gicon: Gio.icon_new_for_string(Me.path + "/icons/harddisk.svg")
-    });
-    iconDark = new St.Icon({
-        gicon: Gio.icon_new_for_string(Me.path + "/icons/harddisk-dark.svg")
-    });*/
-
-    ioSpeed = new St.Label({
+    label = new St.Label({
         text: '---',
         style_class: 'simplenetspeed-label'
     });
 
-    ioSpeedW = new St.Label({
-        text: '---',
-        style_class: 'simplenetspeed-label-w'
-    });
-
-    // ioSpeedStaticIcon = new St.Label({
-    //     text: '💾',
-    //     style_class: 'simplenetspeed-static-icon'
-    // });
-
-    button.set_child(chooseLabel());
-    button.connect('button-press-event', changeMode);
-}
-
-function changeMode() {
-    mode++;
-    if (mode > 4) {
-        mode = 0;
-    }
-    settings.set_int('mode', mode);
-    button.set_child(chooseLabel());
-    parseStat();
-}
-
-function chooseLabel() {
-    if (mode == 0 || mode == 1 || mode == 4) {
-        lbl=ioSpeed;
-    }
-    else {
-        lbl=ioSpeedW;
-    }
-    return lbl;
+    button.set_child(label);
 }
 
 function parseStat() {
@@ -110,68 +54,23 @@ function parseStat() {
 
         let speed = (count - lastCount) / refreshTime;
         let speedUp = (countUp - lastCountUp) / refreshTime;
+        let speedDown = speed - speedUp;
 
-        // speed= 1998999999;
-        // speedUp= 998999999;
-
-        let dot = "";
-        if (speed > lastSpeed) {
-            dot = "⇅";
-        }
-
-        if (mode >= 0 && mode <= 1) {
-            lbl.set_text(dot + speedToString(speed));
-        }
-        else if (mode >= 2 && mode <= 3) {
-            lbl.set_text("↓" + speedToString(speed - speedUp) + " ↑" + speedToString(speedUp));
-        }
-        else if (mode == 4) {
-            lbl.set_text("∑ " + speedToString(count));
-        }
+        let txtSpeedDown = String((speedDown/1000).toFixed(0));
+        let txtSpeedUp = String((speedUp/1000).toFixed(0));
+        label.set_text("↓ " + txtSpeedDown + " KB/s   ↑ " + txtSpeedUp + " KB/s   ∑ " + sizeToString(count));
 
         lastCount = count;
         lastCountUp = countUp;
-        lastSpeed = speed;
     } catch (e) {
-        lbl.set_text(e.message);
+        label.set_text(e.message);
     }
-
-    /*
-    let curDiskstats = GLib.file_get_contents('/proc/diskstats');
-
-    if (diskstats == curDiskstats) {
-        if (cur !== 0) {
-            button.set_child(iconDark);
-            cur = 0;
-        }
-    } else {
-        if (cur != 1) {
-            button.set_child(icon);
-            cur = 1;
-        }
-        diskstats = curDiskstats;
-    }*/
 
     return true;
 }
 
-function speedToString(amount) {
-    let digits;
-    let speed_map;
-    if (mode == 0 || mode == 2) {
-        speed_map = ["bps", "Kbps", "Mbps", "Gbps"];
-    }
-    else if (mode == 1 || mode == 3) {
-        speed_map = ["B/s", "K/s", "M/s", "G/s"];
-    }
-    else if (mode == 4) {
-        speed_map = ["B", "KB", "MB", "GB"];
-    }
-
-    if (amount === 0)
-        return "0"  + speed_map[0];
-
-    if (mode==0 || mode==2) amount = amount * 8;
+function sizeToString(amount){
+    let speed_map = ["B", "KB", "MB", "GB"];
 
     let unit = 0;
     while (amount >= 1000) { // 1M=1024K, 1MB/s=1000MB/s
@@ -179,13 +78,14 @@ function speedToString(amount) {
         ++unit;
     }
 
+    let digits;
     if (amount >= 100) // 100MB 100KB 200KB
         digits = 0;
     else if (amount >= 10) // 10MB 10.2
         digits = 1;
-    else 
+    else
         digits = 2;
-    return String(amount.toFixed(digits)) + speed_map[unit];
+    return String(amount.toFixed(digits)) + " " + speed_map[unit];
 }
 
 function enable() {
